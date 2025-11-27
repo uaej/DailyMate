@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-// imports kept minimal; widgets use Provider where needed
 import '../widgets/home_widgets.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -7,24 +6,21 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('DailyMate'),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.settings))
+    // Content-only Home screen (no Scaffold) so RootScreen can host the global Scaffold
+    return SafeArea(
+      child: Column(
+        children: const [
+          TodaySummaryCard(),
+          GoalCard(),
+          RoutineCard(),
+          Expanded(child: SingleChildScrollView(child: TimelineView())),
+          // AIInputBar intentionally included inside the page content so it appears above bottom nav
+          // Note: do not include global FAB here; RootScreen or other pages may provide their own.
+          SizedBox(height: 8),
+          // AIInputBar placed outside of Expanded to keep it visible
         ],
       ),
-      body: Column(
-        children: [
-          const TodaySummaryCard(),
-          const GoalCard(),
-          const RoutineCard(),
-          Expanded(child: SingleChildScrollView(child: Column(children: const [TimelineView()]))),
-        ],
-      ),
-      bottomNavigationBar: const SizedBox(height: 72, child: AIInputBar()),
-      floatingActionButton: const FloatingAIButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
+

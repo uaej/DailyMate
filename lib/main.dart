@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'screens/home_screen.dart';
+import 'screens/root_screen.dart';
 import 'viewmodel/home_viewmodel.dart';
 
 void main() {
@@ -21,7 +21,7 @@ class MainApp extends StatelessWidget {
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         ),
-        home: const HomeScreen(),
+        home: const RootScreen(),
       ),
     );
   }
