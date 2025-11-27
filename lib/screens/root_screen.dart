@@ -3,7 +3,7 @@ import 'home_screen.dart';
 import 'chat_screen.dart';
 import 'calendar_screen.dart';
 import 'stats_screen.dart';
-import '../widgets/home_widgets.dart';
+// Floating AI button removed per request
 
 class RootScreen extends StatefulWidget {
   const RootScreen({super.key});
@@ -46,7 +46,6 @@ class _RootScreenState extends State<RootScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.bar_chart_outlined), label: 'Stats'),
         ],
       ),
-      floatingActionButton: FloatingAIButton(onPressed: () => _onItemTapped(1)),
     );
   }
 }
