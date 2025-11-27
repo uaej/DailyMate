@@ -46,7 +46,7 @@ class _RootScreenState extends State<RootScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.bar_chart_outlined), label: 'Stats'),
         ],
       ),
-      floatingActionButton: const FloatingAIButton(),
+      floatingActionButton: FloatingAIButton(onPressed: () => _onItemTapped(1)),
     );
   }
 }

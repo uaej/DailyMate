@@ -161,16 +161,15 @@ class AIInputBar extends StatelessWidget {
 }
 
 class FloatingAIButton extends StatelessWidget {
-  const FloatingAIButton({super.key});
+  final VoidCallback? onPressed;
+  const FloatingAIButton({super.key, this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     return FloatingActionButton(
-      onPressed: () {
-        // navigate to Chat tab or show dialog; here we'll show a simple dialog placeholder
-        showModalBottomSheet(context: context, builder: (_) {
-          return SizedBox(height: 400, child: Center(child: Text('AI Chat (placeholder)')));
-        });
+      onPressed: onPressed ?? () {
+        // default fallback: push ChatScreen as a new route
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const Center(child: Text('AI Chat (placeholder)'))));
       },
       child: const Icon(Icons.smart_toy_rounded),
     );
