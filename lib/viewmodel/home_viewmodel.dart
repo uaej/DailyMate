@@ -34,6 +34,8 @@ class HomeViewModel extends ChangeNotifier {
 
   HomeViewModel() {
     _generateMockTimeline();
+    // Trigger AI suggestion automatically on startup (non-blocking)
+    regenerateGoalFromAI();
   }
 
   void _generateMockTimeline() {
@@ -82,7 +84,19 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> regenerateGoalFromAI() async {
     // in real app: call LLM, get suggestion
     await Future.delayed(const Duration(milliseconds: 400));
-    todayGoal = '편입 공부 2시간 확보하기 (AI 제안)';
+    // Add friendly greeting/emojis depending on time of day
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) {
+      todayGoal = '☀️ 좋은 아침이에요 — 오늘 아침 루틴을 시작해볼까요?\n편입 공부 2시간 확보하기 (AI 제안)';
+    } else if (hour >= 12 && hour < 15) {
+      todayGoal = '🍽️ 점심은 맛있게 드셨나요? 이제 오후 업무를 진행해볼게요.\n편입 공부 2시간 확보하기 (AI 제안)';
+    } else if (hour >= 15 && hour < 18) {
+      todayGoal = '🌤️ 좋은 오후예요 — 집중할 시간이에요.\n편입 공부 2시간 확보하기 (AI 제안)';
+    } else if (hour >= 18 && hour < 22) {
+      todayGoal = '🌙 저녁 시간이 다가옵니다 — 오늘의 마무리로 2시간 공부해볼까요?\n편입 공부 2시간 확보하기 (AI 제안)';
+    } else {
+      todayGoal = '🌌 밤이 깊었네요 — 무리하지 말고 내일을 준비해요.\n편입 공부 2시간 확보하기 (AI 제안)';
+    }
     notifyListeners();
   }
 
