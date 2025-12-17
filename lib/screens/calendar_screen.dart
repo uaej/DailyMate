@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodel/home_viewmodel.dart';
 
-enum CalendarView { day, week, month }
-
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -12,210 +10,73 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  CalendarView _view = CalendarView.day; // default to day view
   DateTime _selectedDate = DateTime.now();
-  DateTime _displayedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
-  void _prevDay() {
-    setState(() {
-      _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+  @override
+  void initState() {
+    super.initState();
+    // 화면 진입 시 데이터 갱신
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<HomeViewModel>(context, listen: false).refreshData();
     });
   }
 
-  void _nextDay() {
-    setState(() {
-      _selectedDate = _selectedDate.add(const Duration(days: 1));
-    });
-  }
+  void _addRoutineDialog() {
+    final titleController = TextEditingController();
+    final durationController = TextEditingController(text: '30');
+    TimeOfDay selectedTime = const TimeOfDay(hour: 7, minute: 0);
 
-  Widget _buildSegment() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ChoiceChip(
-          label: const Text('Day'),
-          selected: _view == CalendarView.day,
-          selectedColor: Theme.of(context).colorScheme.primaryContainer,
-          onSelected: (_) => setState(() => _view = CalendarView.day),
-        ),
-        const SizedBox(width: 8),
-        ChoiceChip(
-          label: const Text('Week'),
-          selected: _view == CalendarView.week,
-          selectedColor: Theme.of(context).colorScheme.primaryContainer,
-          onSelected: (_) => setState(() => _view = CalendarView.week),
-        ),
-        const SizedBox(width: 8),
-        ChoiceChip(
-          label: const Text('Month'),
-          selected: _view == CalendarView.month,
-          selectedColor: Theme.of(context).colorScheme.primaryContainer,
-          onSelected: (_) => setState(() => _view = CalendarView.month),
-        ),
-      ],
-    );
-  }
-
-  Widget _dayView(HomeViewModel vm) {
-    final events = vm.getEventsForDate(_selectedDate);
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(onPressed: _prevDay, icon: const Icon(Icons.chevron_left)),
-              Column(
-                children: [
-                  Text('${_selectedDate.year}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  Text('${_selectedDate.month}/${_selectedDate.day}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              IconButton(onPressed: _nextDay, icon: const Icon(Icons.chevron_right)),
-            ],
-          ),
-        ),
-        Expanded(
-          child: events.isEmpty
-              ? const Center(child: Text('이 날짜에는 일정이 없습니다.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: events.length,
-                  itemBuilder: (context, idx) {
-                    final e = events[idx];
-                    final end = e.start.add(e.duration);
-                    final timeRange = '${e.start.hour.toString().padLeft(2,'0')}:${e.start.minute.toString().padLeft(2,'0')} - ${end.hour.toString().padLeft(2,'0')}:${end.minute.toString().padLeft(2,'0')}';
-                    final completed = vm.isEventCompleted(e.id);
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      child: ListTile(
-                        leading: Checkbox(value: completed, onChanged: (_) { vm.toggleEventComplete(e.id); }),
-                        title: Text(e.title, style: TextStyle(decoration: completed ? TextDecoration.lineThrough : TextDecoration.none)),
-                        subtitle: Text('$timeRange · ${e.source}'),
-                        trailing: Container(
-                          width: 8,
-                          height: 40,
-                          decoration: BoxDecoration(color: e.source == 'calendar' ? Colors.blueAccent : Colors.greenAccent, borderRadius: BorderRadius.circular(4)),
-                        ),
-                        onTap: () { vm.toggleEventComplete(e.id); },
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _weekView(HomeViewModel vm) {
-    final week = vm.getWeekEvents();
-    final now = DateTime.now();
-    final days = List.generate(7, (i) => DateTime(now.year, now.month, now.day).add(Duration(days: i)));
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: days.map((day) {
-          final key = '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}';
-          final events = week[key] ?? [];
-          return SizedBox(
-            width: 200,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('반복 루틴 추가'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: '루틴 이름'),
+            ),
+            TextField(
+              controller: durationController,
+              decoration: const InputDecoration(labelText: '소요 시간 (분)'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            Row(
               children: [
-                Text('${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][day.weekday % 7]} ${day.month}/${day.day}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ...events.map((e) {
-                  final completed = vm.isEventCompleted(e.id);
-                  return Container(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: completed ? Colors.grey.shade200 : Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)],
-                    ),
-                    child: Row(
-                      children: [
-                        Checkbox(value: completed, onChanged: (_) { vm.toggleEventComplete(e.id); }),
-                        Expanded(child: Text(e.title, style: TextStyle(decoration: completed ? TextDecoration.lineThrough : TextDecoration.none))),
-                        const SizedBox(width: 6),
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: e.source == 'calendar' ? Colors.blueAccent : Colors.green, shape: BoxShape.circle)),
-                      ],
-                    ),
-                  );
-                }).toList(),
+                const Text('시작 시간: '),
+                TextButton(
+                  onPressed: () async {
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: selectedTime,
+                    );
+                    if (time != null) {
+                      selectedTime = time;
+                      (context as Element).markNeedsBuild();
+                    }
+                  },
+                  child: Text(selectedTime.format(context)),
+                ),
               ],
             ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _monthView(HomeViewModel vm) {
-    final firstDay = DateTime(_displayedMonth.year, _displayedMonth.month, 1);
-    final daysInMonth = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 0).day;
-    final firstWeekday = firstDay.weekday % 7; // 0=Sun
-
-    // build grid of 6 rows x 7 cols
-    final cells = <Widget>[];
-    for (int i = 0; i < firstWeekday; i++) {
-      cells.add(const SizedBox());
-    }
-    for (int d = 1; d <= daysInMonth; d++) {
-      final date = DateTime(_displayedMonth.year, _displayedMonth.month, d);
-      final events = vm.getEventsForDate(date);
-      cells.add(GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedDate = date;
-            _view = CalendarView.day;
-          });
-        },
-        child: Container(
-          margin: const EdgeInsets.all(4),
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.shade200)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$d', style: const TextStyle(fontWeight: FontWeight.w600)),
-              if (events.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text('${events.length} events', style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
-              ]
-            ],
-          ),
+          ],
         ),
-      ));
-    }
-
-    // fill remaining cells to make full grid
-    while (cells.length % 7 != 0) cells.add(const SizedBox());
-
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(onPressed: () { setState(() { _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month - 1, 1); }); }, icon: const Icon(Icons.chevron_left)),
-              Text('${_displayedMonth.year}년 ${_displayedMonth.month}월', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              IconButton(onPressed: () { setState(() { _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 1); }); }, icon: const Icon(Icons.chevron_right)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          GridView.count(
-            crossAxisCount: 7,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: cells,
-            childAspectRatio: 1.1,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+          TextButton(
+            onPressed: () {
+              if (titleController.text.isNotEmpty) {
+                Provider.of<HomeViewModel>(context, listen: false).addRoutine(
+                  titleController.text,
+                  Duration(minutes: int.tryParse(durationController.text) ?? 30),
+                  selectedTime,
+                );
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('추가'),
           ),
         ],
       ),
@@ -225,19 +86,214 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final vm = Provider.of<HomeViewModel>(context);
-    return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 8),
-          _buildSegment(),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: _view == CalendarView.day ? _dayView(vm) : (_view == CalendarView.week ? _weekView(vm) : _monthView(vm)),
+    
+    // 타임라인 범위 (06:00 ~ 24:00)
+    final startHour = 6;
+    final endHour = 24;
+    
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 1. 헤더 (날짜 및 컨트롤)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_selectedDate.year}년 ${_selectedDate.month}월 ${_selectedDate.day}일',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        vm.isLoading ? '동기화 중...' : '오늘의 일정',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: vm.refreshData,
+                    tooltip: '캘린더/태스크 동기화',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_task),
+                    onPressed: _addRoutineDialog,
+                    tooltip: '루틴 추가',
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            
+            // 2. 타임라인 뷰
+            Expanded(
+              child: vm.isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 시간축
+                      SizedBox(
+                        width: 50,
+                        child: ListView.builder(
+                          itemCount: endHour - startHour + 1,
+                          itemBuilder: (context, index) {
+                            final hour = startHour + index;
+                            return SizedBox(
+                              height: 60, // 1시간 높이
+                              child: Center(
+                                child: Text(
+                                  '$hour:00', 
+                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      
+                      // 이벤트 영역
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Stack(
+                            children: [
+                              // 그리드 라인
+                              Column(
+                                children: List.generate(endHour - startHour + 1, (index) {
+                                  return Container(
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              
+                              // 이벤트 블록들
+                              ...vm.events.map((event) {
+                                // 시간 위치 계산
+                                final eventHour = event.start.hour;
+                                final eventMinute = event.start.minute;
+                                
+                                if (eventHour < startHour || eventHour >= endHour) return const SizedBox();
+                                
+                                final topOffset = (eventHour - startHour) * 60.0 + eventMinute;
+                                final height = event.duration.inMinutes.toDouble();
+                                
+                                Color eventColor;
+                                switch (event.source) {
+                                  case 'calendar': eventColor = Colors.blue.shade100; break;
+                                  case 'routine': eventColor = Colors.orange.shade100; break;
+                                  case 'task': eventColor = Colors.green.shade100; break;
+                                  default: eventColor = Colors.grey.shade100;
+                                }
+
+                                return Positioned(
+                                  top: topOffset,
+                                  left: 4,
+                                  right: 4,
+                                  height: height > 20 ? height : 20,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: eventColor,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: eventColor.withOpacity(0.5)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          event.title,
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (height > 40)
+                                          Text(
+                                            '${event.duration.inMinutes}분',
+                                            style: const TextStyle(fontSize: 10),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+            ),
+            
+            // 3. 하단 배정되지 않은 할 일 (시간 배정 대기)
+            if (vm.unscheduledTasks.isNotEmpty)
+              Container(
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, -5))
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Text('시간 미정 할 일 (${vm.unscheduledTasks.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: vm.unscheduledTasks.length,
+                        itemBuilder: (context, index) {
+                          final task = vm.unscheduledTasks[index];
+                          return Container(
+                            width: 120,
+                            margin: const EdgeInsets.only(right: 8, bottom: 12),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(task.title, style: const TextStyle(fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                const Spacer(),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('${task.estimatedMinutes}분', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    InkWell(
+                                      onTap: () {
+                                        // 현재 시간으로 배정 (임시 - 나중엔 드래그 앤 드롭)
+                                        final now = DateTime.now();
+                                        // 다음 정각으로 배정
+                                        final nextHour = now.hour + 1;
+                                        vm.scheduleTask(task, DateTime(now.year, now.month, now.day, nextHour, 0));
+                                      },
+                                      child: const Icon(Icons.add_circle, size: 20, color: Colors.blue),
+                                    )
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -9,28 +9,26 @@ class StatsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = Provider.of<HomeViewModel>(context);
 
-    // Calculate streak (mock: based on completed routines today)
-    final completedRoutines = vm.morningRoutines.where((r) => r.completed).length;
-    final streakDays = completedRoutines > 0 ? 12 : 5; // mock streak value; could be from persistent storage
+    // Calculate streak (mock: based on simple logic for now)
+    final streakDays = 5; 
 
-    // Calculate this week's completed tasks
-    final weekEvents = vm.getWeekEvents();
-    int completedThisWeek = 0;
-    for (var dayEvents in weekEvents.values) {
-      for (var e in dayEvents) {
-        if (vm.isEventCompleted(e.id)) completedThisWeek++;
-      }
-    }
-    final totalWeekEvents = weekEvents.values.fold(0, (sum, list) => sum + list.length);
-
-    // Calculate morning routine completion rate today
-    final routineTotal = vm.morningRoutines.length;
-    final routineCompleted = vm.morningRoutines.where((r) => r.completed).length;
-    final routineRate = routineTotal > 0 ? (routineCompleted / routineTotal * 100).toStringAsFixed(0) : '0';
-
-    // Today's focus time (mock: from timeline durations)
-    final todayEvents = vm.getEventsForDate(DateTime.now());
+    // Calculate today's stats from 'events'
+    // Filter events that are completed (mock logic: assuming past events are done based on time for now, as we don't have completion flag in all events yet)
+    final now = DateTime.now();
+    final todayEvents = vm.events;
+    
+    // Simple completion logic: if end time passed, count as done (temporary)
+    final completedEventsCount = todayEvents.where((e) => e.start.add(e.duration).isBefore(now)).length;
+    final totalEventsCount = todayEvents.length;
+    
+    // Focus Minutes
     final focusMinutes = todayEvents.fold(0, (sum, e) => sum + e.duration.inMinutes);
+
+    // Routine Stats
+    final routines = vm.routines;
+    final routineTotal = routines.length;
+    final routineCompleted = routines.where((r) => r.completed).length; 
+    final routineRate = routineTotal > 0 ? (routineCompleted / routineTotal * 100).toStringAsFixed(0) : '0';
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -60,7 +58,7 @@ class StatsScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('${streakDays}일째', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
+                        Text('$streakDays일째', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
                         Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -76,7 +74,6 @@ class StatsScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
                         value: streakDays / 30,
-                        minHeight: 8,
                         backgroundColor: Colors.white30,
                         valueColor: const AlwaysStoppedAnimation(Colors.white),
                       ),
@@ -87,38 +84,8 @@ class StatsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Weekly completed tasks
-            Text('이번 주', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    Column(
-                      children: [
-                        Text('완료한 태스크', style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 8),
-                        Text('$completedThisWeek / $totalWeekEvents', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    Container(width: 1, height: 60, color: Colors.grey.shade300),
-                    Column(
-                      children: [
-                        Text('완료율', style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 8),
-                        Text('${((completedThisWeek / (totalWeekEvents > 0 ? totalWeekEvents : 1)) * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
             // Today's stats
-            Text('오늘', style: Theme.of(context).textTheme.titleMedium),
+            Text('오늘 현황', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Card(
               child: Padding(
@@ -131,9 +98,9 @@ class StatsScreen extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('🎯 아침 루틴', style: Theme.of(context).textTheme.bodyMedium),
+                            Text('🎯 루틴 달성', style: Theme.of(context).textTheme.bodyMedium),
                             const SizedBox(height: 6),
-                            Text('$routineCompleted / $routineTotal ($routineRate%)', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            Text('$routineCompleted / $routineTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         SizedBox(
@@ -163,7 +130,7 @@ class StatsScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('⏱️ 집중 시간', style: Theme.of(context).textTheme.bodyMedium),
+                              Text('⏱️ 총 예정 시간', style: Theme.of(context).textTheme.bodyMedium),
                               const SizedBox(height: 6),
                               Text('${(focusMinutes ~/ 60)}시간 ${focusMinutes % 60}분', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orangeAccent)),
                             ],
@@ -175,9 +142,9 @@ class StatsScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('📝 예정 태스크', style: Theme.of(context).textTheme.bodyMedium),
+                              Text('📝 완료 추정', style: Theme.of(context).textTheme.bodyMedium),
                               const SizedBox(height: 6),
-                              Text('${todayEvents.length}개', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purpleAccent)),
+                              Text('$completedEventsCount / $totalEventsCount', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purpleAccent)),
                             ],
                           ),
                         ),
@@ -185,24 +152,6 @@ class StatsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Motivation message
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('💪 오늘의 다짐', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(
-                    streakDays < 7 ? '루틴을 꾸준히 지켜보세요. 작은 습관이 모여 큰 변화를 만듭니다!' : streakDays < 30 ? '멋진 진행 중입니다! 계속 이 감각을 유지해보세요.' : '30일 연속 달성 가능합니다. 거의 다 왔어요!',
-                    style: const TextStyle(fontSize: 12, height: 1.5),
-                  ),
-                ],
               ),
             ),
             const SizedBox(height: 20),

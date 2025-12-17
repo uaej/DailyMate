@@ -1,11 +1,17 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import '../services/database_service.dart';
+import '../services/calendar_service.dart';
+import '../models/task.dart';
+import '../models/goal.dart';
 
 class RoutineItem {
   final String title;
   final Duration duration;
+  final DateTime startTime; // 루틴 시작 시간
   bool completed;
 
-  RoutineItem({required this.title, required this.duration, this.completed = false});
+  RoutineItem({required this.title, required this.duration, required this.startTime, this.completed = false});
 }
 
 class TimelineEvent {
@@ -13,134 +19,168 @@ class TimelineEvent {
   final String title;
   final DateTime start;
   final Duration duration;
-  final String source; // e.g., 'calendar', 'routine', 'ai'
+  final String source; // 'calendar', 'routine', 'task', 'ai'
+  final bool isAllDay;
 
-  TimelineEvent({required this.id, required this.title, required this.start, required this.duration, required this.source});
+  TimelineEvent({
+    required this.id, 
+    required this.title, 
+    required this.start, 
+    required this.duration, 
+    required this.source,
+    this.isAllDay = false
+  });
 }
 
 class HomeViewModel extends ChangeNotifier {
-  String todaySummary = '미팅 2개 · 공부 1시간 · 사이드 프로젝트 1개';
-  String todayGoal = '편입 공부 2시간을 확보하기';
-
-  List<RoutineItem> morningRoutines = [
-    RoutineItem(title: '영양제', duration: const Duration(minutes: 5)),
-    RoutineItem(title: '운동', duration: const Duration(minutes: 20)),
-    RoutineItem(title: '공부', duration: const Duration(hours: 1)),
+  // StatsScreen 등에서 참조하는 옛 루틴 변수 (호환성 유지)
+  List<RoutineItem> get morningRoutines => routines;
+  
+  // 실제 관리되는 루틴 리스트
+  List<RoutineItem> routines = [
+    RoutineItem(title: '기상 및 영양제', duration: const Duration(minutes: 30), startTime: DateTime(2024, 1, 1, 7, 0)),
+    RoutineItem(title: '오전 운동', duration: const Duration(minutes: 60), startTime: DateTime(2024, 1, 1, 8, 0)),
   ];
 
-  List<TimelineEvent> timeline = [];
-  // store completion state by event id
-  final Map<String, bool> _eventCompletion = {};
+  List<TimelineEvent> events = [];
+  List<Task> unscheduledTasks = []; 
+  List<Goal> activeGoals = []; // 활성 목표 리스트 추가
+  bool isLoading = false;
+  
+  // AI 연동 필드
+  String todayGoal = '로드 중...';
+  String todaySummary = '오늘의 요약을 불러오고 있습니다.';
 
   HomeViewModel() {
-    _generateMockTimeline();
-    // Trigger AI suggestion automatically on startup (non-blocking)
-    regenerateGoalFromAI();
+    refreshData();
   }
 
-  void _generateMockTimeline() {
-    final now = DateTime.now();
-    timeline = [
-      TimelineEvent(id: '${DateTime(now.year, now.month, now.day, 7, 30).millisecondsSinceEpoch}-a', title: '아침 루틴', start: DateTime(now.year, now.month, now.day, 7, 30), duration: const Duration(hours:1, minutes:30), source: 'routine'),
-      TimelineEvent(id: '${DateTime(now.year, now.month, now.day, 9, 0).millisecondsSinceEpoch}-b', title: '출근 / 업무', start: DateTime(now.year, now.month, now.day, 9, 0), duration: const Duration(hours:4), source: 'calendar'),
-      TimelineEvent(id: '${DateTime(now.year, now.month, now.day, 11, 0).millisecondsSinceEpoch}-c', title: '팀 미팅', start: DateTime(now.year, now.month, now.day, 11, 0), duration: const Duration(hours:1), source: 'calendar'),
-      TimelineEvent(id: '${DateTime(now.year, now.month, now.day, 20, 0).millisecondsSinceEpoch}-d', title: '사이드 프로젝트 미팅', start: DateTime(now.year, now.month, now.day, 20, 0), duration: const Duration(hours:1), source: 'calendar'),
-    ];
-    for (var e in timeline) {
-      _eventCompletion[e.id] = false;
-    }
+  Future<void> refreshData() async {
+    isLoading = true;
     notifyListeners();
-  }
 
-  /// Generate mock events across the next 7 days to populate the Calendar weekly view.
-  Map<String, List<TimelineEvent>> getWeekEvents() {
-    final Map<String, List<TimelineEvent>> week = {};
-    final now = DateTime.now();
-    for (int d = 0; d < 7; d++) {
-      final day = DateTime(now.year, now.month, now.day).add(Duration(days: d));
-      final key = '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}';
-      week[key] = [];
-    }
+    try {
+      final now = DateTime.now();
+      events.clear();
+      unscheduledTasks.clear();
 
-    // Distribute some mock events across the week
-    for (int i = 0; i < 7; i++) {
-      final day = DateTime(now.year, now.month, now.day).add(Duration(days: i));
-      // 1 fixed calendar event per day at 9:00
-      final e1 = TimelineEvent(id: '${DateTime(day.year, day.month, day.day, 9, 0).millisecondsSinceEpoch}-cal', title: '업무 블록', start: DateTime(day.year, day.month, day.day, 9, 0), duration: const Duration(hours: 3), source: 'calendar');
-      week['${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}']?.add(e1);
-      _eventCompletion[e1.id] = _eventCompletion[e1.id] ?? false;
-      // Add occasional side project or study blocks
-      if (i % 2 == 0) {
-        final e2 = TimelineEvent(id: '${DateTime(day.year, day.month, day.day, 19, 0).millisecondsSinceEpoch}-ai', title: '공부/프로젝트', start: DateTime(day.year, day.month, day.day, 19, 0), duration: const Duration(hours: 1, minutes:30), source: 'ai');
-        week['${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}']?.add(e2);
-        _eventCompletion[e2.id] = _eventCompletion[e2.id] ?? false;
+      // 1. Google 캘린더 일정
+      final calendarEvents = await CalendarService.getTodayEvents();
+      for (var e in calendarEvents) {
+        final startParts = e['start'].toString().split(':');
+        final endParts = e['end'].toString().split(':');
+        final startTime = DateTime(now.year, now.month, now.day, int.parse(startParts[0]), int.parse(startParts[1]));
+        final endTime = DateTime(now.year, now.month, now.day, int.parse(endParts[0]), int.parse(endParts[1]));
+        
+        events.add(TimelineEvent(
+          id: 'cal_${e['title']}',
+          title: e['title'],
+          start: startTime,
+          duration: endTime.difference(startTime),
+          source: 'calendar'
+        ));
       }
+
+      // 2. DB Task
+      final tasks = await DatabaseService.getTodayTasks();
+      for (var task in tasks) {
+        if (task.status != 'done') {
+           // Task 모델이 시간 정보가 없다면 일단 미배정 리스트로.
+           unscheduledTasks.add(task);
+        }
+      }
+
+      // 3. 루틴
+      for (var routine in routines) {
+        final start = DateTime(now.year, now.month, now.day, routine.startTime.hour, routine.startTime.minute);
+        events.add(TimelineEvent(
+          id: 'routine_${routine.title}',
+          title: routine.title,
+          start: start,
+          duration: routine.duration,
+          source: 'routine'
+        ));
+      }
+
+      // 4. Goals 로드
+      activeGoals = await DatabaseService.getActiveGoals();
+
+      // 5. AI 제안 메시지 (테스트용)
+      todayGoal = '오늘도 파이팅하세요! (AI)';
+      todaySummary = '총 ${events.length}개의 일정과 ${unscheduledTasks.length}개의 할 일이 있습니다.';
+
+      events.sort((a, b) => a.start.compareTo(b.start));
+
+    } catch (e) {
+      print('데이터 로드 실패: $e');
     }
 
-    return week;
-  }
-
-  // Simulate AI generating a new goal
-  Future<void> regenerateGoalFromAI() async {
-    // in real app: call LLM, get suggestion
-    await Future.delayed(const Duration(milliseconds: 400));
-    // Add friendly greeting/emojis depending on time of day
-    final hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 12) {
-      todayGoal = '☀️ 좋은 아침이에요 — 오늘 아침 루틴을 시작해볼까요?\n편입 공부 2시간 확보하기 (AI 제안)';
-    } else if (hour >= 12 && hour < 15) {
-      todayGoal = '🍽️ 점심은 맛있게 드셨나요? 이제 오후 업무를 진행해볼게요.\n편입 공부 2시간 확보하기 (AI 제안)';
-    } else if (hour >= 15 && hour < 18) {
-      todayGoal = '🌤️ 좋은 오후예요 — 집중할 시간이에요.\n편입 공부 2시간 확보하기 (AI 제안)';
-    } else if (hour >= 18 && hour < 22) {
-      todayGoal = '🌙 저녁 시간이 다가옵니다 — 오늘의 마무리로 2시간 공부해볼까요?\n편입 공부 2시간 확보하기 (AI 제안)';
-    } else {
-      todayGoal = '🌌 밤이 깊었네요 — 무리하지 말고 내일을 준비해요.\n편입 공부 2시간 확보하기 (AI 제안)';
-    }
+    isLoading = false;
     notifyListeners();
   }
-
-  // Simulate AI rebalancing timeline when user requests
-  Future<void> rebalanceSchedule() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // simple mock: insert a short task at 22:00
+  
+  // 루틴 추가
+  void addRoutine(String title, Duration duration, TimeOfDay time) {
     final now = DateTime.now();
-    final newEvent = TimelineEvent(id: '${DateTime(now.year, now.month, now.day, 22, 0).millisecondsSinceEpoch}-ai-add', title: 'AI 배치 태스크', start: DateTime(now.year, now.month, now.day, 22, 0), duration: const Duration(hours:1), source: 'ai');
-    timeline.add(newEvent);
-    _eventCompletion[newEvent.id] = false;
+    routines.add(RoutineItem(
+      title: title, 
+      duration: duration, 
+      startTime: DateTime(now.year, now.month, now.day, time.hour, time.minute)
+    ));
+    refreshData();
+  }
+
+  // 스케줄 배치
+  void scheduleTask(Task task, DateTime startTime) {
+    events.add(TimelineEvent(
+      id: 'task_${task.id}',
+      title: task.title,
+      start: startTime,
+      duration: Duration(minutes: task.estimatedMinutes),
+      source: 'task'
+    ));
+    unscheduledTasks.removeWhere((t) => t.id == task.id);
+    events.sort((a, b) => a.start.compareTo(b.start));
     notifyListeners();
   }
 
-  bool isEventCompleted(String id) {
-    return _eventCompletion[id] ?? false;
-  }
+  // --- 기존 호환성 유지 메서드 ---
 
-  void toggleEventComplete(String id) {
-    _eventCompletion[id] = !(_eventCompletion[id] ?? false);
-    notifyListeners();
-  }
-
-  /// Return events for a specific date (combines timeline and week events)
   List<TimelineEvent> getEventsForDate(DateTime date) {
-    final List<TimelineEvent> results = [];
-    // from timeline
-    for (var e in timeline) {
-      if (e.start.year == date.year && e.start.month == date.month && e.start.day == date.day) {
-        results.add(e);
-      }
+    final now = DateTime.now();
+    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+      return events;
     }
-    // from generated week events (if within next 7 days)
-    final week = getWeekEvents();
-    final key = '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
-    if (week.containsKey(key)) {
-      results.addAll(week[key] ?? []);
-    }
-    results.sort((a,b) => a.start.compareTo(b.start));
-    return results;
+    return [];
+  }
+  
+  Map<String, List<TimelineEvent>> getWeekEvents() {
+    return {};
+  }
+  
+  bool isEventCompleted(String id) {
+    return false;
+  }
+  
+  void toggleEventComplete(String id) {
+    // 기능 미구현
+  }
+  
+  Future<void> rebalanceSchedule() async {
+    // AI 재조정 - 단순히 새로고침
+    await refreshData();
+  }
+  
+  Future<void> regenerateGoalFromAI() async {
+    // AI 목표 생성 - 단순히 새로고침
+    await Future.delayed(const Duration(milliseconds: 500));
+    notifyListeners();
   }
 
   void toggleRoutineComplete(int index) {
-    morningRoutines[index].completed = !morningRoutines[index].completed;
-    notifyListeners();
+      if(index < routines.length) {
+          routines[index].completed = !routines[index].completed;
+          notifyListeners();
+      }
   }
 }

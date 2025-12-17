@@ -1,12 +1,29 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/database_service.dart';
+import '../services/llm_service.dart';
+import '../services/context_service.dart';
+import '../services/action_executor.dart';
+import '../models/goal.dart';
+import '../models/task.dart';
+import '../viewmodel/home_viewmodel.dart';
 
 class ChatMessage {
   final String text;
   final bool fromUser;
   final DateTime time;
-  ChatMessage({required this.text, required this.fromUser, DateTime? time}) : time = time ?? DateTime.now();
+  final List<LLMAction>? pendingActions;
+  bool isActionExecuted;
+
+  ChatMessage({
+    required this.text, 
+    required this.fromUser, 
+    DateTime? time,
+    this.pendingActions,
+    this.isActionExecuted = false,
+  }) : time = time ?? DateTime.now();
 }
 
 class ChatScreen extends StatefulWidget {
@@ -37,8 +54,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _startRecording() {
-    // NOTE: This is a mocked recording flow. For real voice input,
-    // integrate a speech-to-text plugin (e.g., speech_to_text) and handle permissions.
     setState(() {
       _isRecording = true;
       _recordStart = DateTime.now();
@@ -57,24 +72,59 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _isRecording = false;
     });
-    // Simulate STT result after short delay
     Future.delayed(const Duration(milliseconds: 600), () {
       final simulatedText = '음성 메시지 (${_recordDuration.inSeconds}s)로 전송';
       _send(simulatedText);
     });
   }
 
-  void _simulateAssistantReply(String userText) {
+  void _simulateAssistantReply(String userText) async {
     setState(() { _isTyping = true; });
-    // simple mocked reply: echo + suggestion
-    Future.delayed(const Duration(milliseconds: 800), () {
-      final reply = "알겠어요! '${userText.length > 40 ? userText.substring(0,40) + '...' : userText}' 에 대해 도와드릴게요.\n오늘 일정에 맞춰 제안할게요.";
-      setState(() {
-        _messages.add(ChatMessage(text: reply, fromUser: false));
-        _isTyping = false;
-      });
-      _scrollToEnd();
-    });
+    
+    try {
+      final contextData = await ContextService.buildContext();
+      
+      final llmResponse = await LLMService.processUserInput(
+        userInput: userText,
+        context: contextData,
+      );
+      
+      String responseText = llmResponse.summary;
+      
+      // 즉시 실행 로직
+      if (llmResponse.actions.isNotEmpty) {
+        final executionResult = await ActionExecutor.executeActions(llmResponse.actions);
+        
+        // 데이터 갱신 (즉시 반영)
+        if (mounted) {
+           Provider.of<HomeViewModel>(context, listen: false).refreshData();
+        }
+
+        // 실행 결과 텍스트 추가
+        if (executionResult.contains('실패')) {
+           responseText += '\n\n⚠️ 일부 작업 실행 실패:\n$executionResult';
+        } else if (executionResult.isNotEmpty) {
+           // 성공 메시지는 간단하게 요약에 포함되어 있다고 가정하거나, 필요시 추가
+           // responseText += '\n\n✅ 실행 완료'; 
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(text: responseText, fromUser: false));
+          _isTyping = false;
+        });
+        _scrollToEnd();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(text: '오류가 발생했습니다: ${e.toString()}', fromUser: false));
+          _isTyping = false;
+        });
+        _scrollToEnd();
+      }
+    }
   }
 
   void _scrollToEnd() {
@@ -101,13 +151,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final align = m.fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final color = m.fromUser ? Theme.of(context).colorScheme.primary : Colors.grey.shade200;
     final textColor = m.fromUser ? Colors.white : Colors.black87;
+    
     return Column(
       crossAxisAlignment: align,
       children: [
         Container(
           margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
           decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
           child: Text(m.text, style: TextStyle(color: textColor, height: 1.3)),
         ),
@@ -162,37 +213,22 @@ class _ChatScreenState extends State<ChatScreen> {
                       onSubmitted: _send,
                       decoration: InputDecoration(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        hintText: 'AI에게 질문하거나 일정 변경을 요청하세요',
+                        hintText: 'AI에게 할 일을 부탁해보세요',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onLongPressStart: (_) => _startRecording(),
-                        onLongPressEnd: (_) => _stopRecording(),
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: _isRecording ? Colors.redAccent : Colors.grey.shade200,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(_isRecording ? Icons.mic : Icons.mic_none, color: _isRecording ? Colors.white : Colors.black54),
-                        ),
+                  GestureDetector(
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      child: IconButton(
+                        icon: const Icon(Icons.send, color: Colors.white),
+                        onPressed: () => _send(_controller.text),
                       ),
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: IconButton(
-                          icon: const Icon(Icons.send, color: Colors.white),
-                          onPressed: () => _send(_controller.text),
-                        ),
-                      ),
-                    ],
-                  )
+                    ),
+                  ),
                 ],
               ),
             ),

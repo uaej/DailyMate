@@ -6,19 +6,16 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Content-only Home screen (no Scaffold) so RootScreen can host the global Scaffold
-    return SafeArea(
-      child: Column(
-        children: const [
-          TodaySummaryCard(),
-          GoalCard(),
-          RoutineCard(),
-          Expanded(child: SingleChildScrollView(child: TimelineView())),
-          // AIInputBar intentionally included inside the page content so it appears above bottom nav
-          // Note: do not include global FAB here; RootScreen or other pages may provide their own.
-          SizedBox(height: 8),
-          // AIInputBar placed outside of Expanded to keep it visible
-        ],
+    return const SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            TodaySummaryCard(),
+            GoalCard(),
+            RoutineCard(),
+            SizedBox(height: 80), // 하단 네비게이션 바 공간
+          ],
+        ),
       ),
     );
   }
